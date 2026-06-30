@@ -47,6 +47,7 @@
 #include "camera.h"
 #include "char_transfer.h"
 #include "comm_player_manager.h"
+#include "debug.h"
 #include "dynamic_map_features.h"
 #include "easy3d.h"
 #include "field_bgm.h"
@@ -866,6 +867,23 @@ static void ov5_021D1878(FieldSystem *fieldSystem)
     }
 
     sub_02061C48(fieldSystem->mapObjMan);
+#if FOLLOW_MON_SPAWN_ENABLED
+    EmulatorLog("ov5_021D1878: follower funcs init=0x%08X load=0x%08X",
+        (u32)FollowMon_Init,
+        (u32)FollowMon_Load);
+    EmulatorLog("ov5_021D1878: FollowMon_Init begin map=%d pos=(%d,%d) dir=%d",
+        fieldSystem->location->mapId,
+        PlayerAvatar_GetXPos(fieldSystem->playerAvatar),
+        PlayerAvatar_GetZPos(fieldSystem->playerAvatar),
+        PlayerAvatar_GetFacingDir(fieldSystem->playerAvatar));
+    FollowMon_Init(
+        fieldSystem,
+        PlayerAvatar_GetXPos(fieldSystem->playerAvatar),
+        PlayerAvatar_GetZPos(fieldSystem->playerAvatar),
+        PlayerAvatar_GetFacingDir(fieldSystem->playerAvatar),
+        fieldSystem->location->mapId);
+    EmulatorLog("ov5_021D1878: FollowMon_Init done");
+#endif
 #if FOLLOW_MON_ENABLED
     FollowMon_Reset(fieldSystem);
 #endif

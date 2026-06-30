@@ -30,7 +30,7 @@
 #include "field_overworld_state.h"
 #include "field_overworld_weather.h"
 #include "field_system.h"
-#include "follower.h"
+#include "follow_mon_feature.h"
 #include "field_task.h"
 #include "field_transition.h"
 #include "game_overlay.h"
@@ -356,9 +356,6 @@ static void FieldMapChange_CreateObjects(FieldSystem *fieldSystem)
 
     fieldSystem->playerAvatar = PlayerAvatar_New(fieldSystem->mapObjMan, fieldSystem->location->x, fieldSystem->location->z, fieldSystem->location->faceDirection, playerData->playerState, gender, 0, playerData);
 
-#if FOLLOW_MON_ENABLED
-    FollowMon_Init(fieldSystem, fieldSystem->location->x, fieldSystem->location->z, fieldSystem->location->faceDirection, fieldSystem->location->mapId);
-#endif
     sub_0203A418(fieldSystem);
     MapObjectMan_StopAllMovement(fieldSystem->mapObjMan);
 }
@@ -381,9 +378,6 @@ static void FieldMapChange_LoadObjects(FieldSystem *fieldSystem)
 
     fieldSystem->playerAvatar = PlayerAvatar_NewLoad(fieldSystem->mapObjMan, playerData, gender);
 
-#if FOLLOW_MON_ENABLED
-    FollowMon_Load(fieldSystem, fieldSystem->location->mapId);
-#endif
     MapObjectMan_StopAllMovement(fieldSystem->mapObjMan);
 }
 

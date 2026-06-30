@@ -1,5 +1,6 @@
 #include "constants/player_avatar.h"
 #include "constants/scrcmd.h"
+#include "debug.h"
 #include "field/field_system.h"
 #include "follower.h"
 #include "generated/movement_types.h"
@@ -132,7 +133,7 @@ MapObject *FollowMon_GetMapObject(FieldSystem *fieldSystem)
 
 MapObject *FollowMon_Init(FieldSystem *fieldSystem, int x, int z, int dir, int mapId)
 {
-  Party *party = SaveData_GetParty(fieldSystem->saveData);
+  Party *party;
   Pokemon *mon;
   MapObject *mapObj;
   int species;
@@ -140,51 +141,70 @@ MapObject *FollowMon_Init(FieldSystem *fieldSystem, int x, int z, int dir, int m
   int gender;
   int graphics;
 
+  EmulatorLog("FollowMon_Init: begin map=%d pos=(%d,%d) dir=%d fieldSystem=%p saveData=%p", mapId, x, z, dir, fieldSystem, fieldSystem->saveData);
   FollowMon_Clear(&fieldSystem->followMon);
+
+  EmulatorLog("FollowMon_Init: get party begin");
+  party = SaveData_GetParty(fieldSystem->saveData);
+  EmulatorLog("FollowMon_Init: get party done party=%p", party);
 
   mon = FollowMon_GetLeadPokemon(party);
   if (mon == NULL) {
+      EmulatorLog("FollowMon_Init: no lead mon");
       return NULL;
   }
 
   species = Pokemon_GetValue(mon, MON_DATA_SPECIES, NULL);
+  EmulatorLog("FollowMon_Init: lead mon species=%d", species);
   if (!FollowMon_CanSpawn(fieldSystem, species, mapId)) {
+      EmulatorLog("FollowMon_Init: cannot spawn species=%d map=%d", species, mapId);
       return NULL;
   }
 
   form = Pokemon_GetValue(mon, MON_DATA_FORM, NULL);
   gender = Pokemon_GetValue(mon, MON_DATA_GENDER, NULL);
   graphics = FollowMon_GetObjectGraphicsID(species, form, gender);
+  EmulatorLog("FollowMon_Init: form=%d gender=%d graphics=%d", form, gender, graphics);
 
   mapObj = MapObjectMan_AddMapObject(fieldSystem->mapObjMan, x, z, dir, graphics, MOVEMENT_TYPE_FOLLOW_PLAYER, mapId);
   if (mapObj == NULL) {
+      EmulatorLog("FollowMon_Init: add map object failed");
       return NULL;
   }
+  EmulatorLog("FollowMon_Init: mapObj=%p", mapObj);
 
   FollowMon_SetMapObjectDefaults(mapObj);
   FollowMonMood_SetPokemon(&fieldSystem->followMonMood, mon);
   FollowMon_LoadMapObjectInfo(fieldSystem, mapObj, mon);
 
+  EmulatorLog("FollowMon_Init: done");
   return mapObj;
 }
 
 void FollowMon_Load(FieldSystem *fieldSystem, int mapId)
 {
-  Party *party = SaveData_GetParty(fieldSystem->saveData);
+  Party *party;
   Pokemon *mon;
   int species;
   MapObject *mapObj;
   FollowMon_Clear(&fieldSystem->followMon);
 
+  EmulatorLog("FollowMon_Load: begin map=%d fieldSystem=%p saveData=%p", mapId, fieldSystem, fieldSystem->saveData);
+  EmulatorLog("FollowMon_Load: get party begin");
+  party = SaveData_GetParty(fieldSystem->saveData);
+  EmulatorLog("FollowMon_Load: get party done party=%p", party);
+
   mon = FollowMon_GetLeadPokemon(party);
   if (mon == NULL) {
-    Save_FollowMon_SetFollowState(FOLLOW_MON_SAVE_NONE, Save_FollowMon_Get(fieldSystem->saveData));
+    EmulatorLog("FollowMon_Load: no lead mon");
     return;
   }
 
   species = Pokemon_GetValue(mon, MON_DATA_SPECIES, NULL);
+  EmulatorLog("FollowMon_Load: lead mon species=%d", species);
   FollowMonMood_SetPokemon(&fieldSystem->followMonMood, mon);
   mapObj = FollowMon_FindMapObject(fieldSystem);
+  EmulatorLog("FollowMon_Load: mapObj=%p", mapObj);
 
   if (FollowMon_CanSpawn(fieldSystem, species, mapId)) {
     if (mapObj == NULL) {
