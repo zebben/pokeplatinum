@@ -30,6 +30,7 @@
 #include "field_overworld_state.h"
 #include "field_overworld_weather.h"
 #include "field_system.h"
+#include "follower.h"
 #include "field_task.h"
 #include "field_transition.h"
 #include "game_overlay.h"
@@ -48,6 +49,7 @@
 #include "pokeradar.h"
 #include "render_window.h"
 #include "save_player.h"
+#include "save_follow_mon.h"
 #include "savedata.h"
 #include "savedata_misc.h"
 #include "screen_fade.h"
@@ -217,6 +219,12 @@ static void FieldMapChange_SetNewLocation(FieldSystem *fieldSystem, const Locati
     Location *location = FieldOverworldState_GetPrevLocation(fieldState);
 
     if (nextLocation != NULL) {
+#if FOLLOW_MON_ENABLED
+        SaveFollowMon *saveFollowMon = Save_FollowMon_Get(fieldSystem->saveData);
+
+        Save_FollowMon_SetMapID(fieldSystem->location->mapId, saveFollowMon);
+        Save_FollowMon_SetInhibitFlagState(saveFollowMon, FALSE);
+#endif
         *location = *fieldSystem->location;
         *(fieldSystem->location) = *nextLocation;
     }
@@ -348,6 +356,9 @@ static void FieldMapChange_CreateObjects(FieldSystem *fieldSystem)
 
     fieldSystem->playerAvatar = PlayerAvatar_New(fieldSystem->mapObjMan, fieldSystem->location->x, fieldSystem->location->z, fieldSystem->location->faceDirection, playerData->playerState, gender, 0, playerData);
 
+#if FOLLOW_MON_ENABLED
+    FollowMon_Init(fieldSystem, fieldSystem->location->x, fieldSystem->location->z, fieldSystem->location->faceDirection, fieldSystem->location->mapId);
+#endif
     sub_0203A418(fieldSystem);
     MapObjectMan_StopAllMovement(fieldSystem->mapObjMan);
 }
@@ -370,6 +381,9 @@ static void FieldMapChange_LoadObjects(FieldSystem *fieldSystem)
 
     fieldSystem->playerAvatar = PlayerAvatar_NewLoad(fieldSystem->mapObjMan, playerData, gender);
 
+#if FOLLOW_MON_ENABLED
+    FollowMon_Load(fieldSystem, fieldSystem->location->mapId);
+#endif
     MapObjectMan_StopAllMovement(fieldSystem->mapObjMan);
 }
 

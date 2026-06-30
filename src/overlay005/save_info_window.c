@@ -14,6 +14,7 @@
 #include "bg_window.h"
 #include "comm_manager.h"
 #include "field_overworld_state.h"
+#include "follower.h"
 #include "font.h"
 #include "location.h"
 #include "map_header.h"
@@ -193,6 +194,9 @@ BOOL FieldSystem_Save(FieldSystem *fieldSystem)
 
 static void FieldSystem_SaveObjectsAndLocation(FieldSystem *fieldSystem)
 {
+#if FOLLOW_MON_ENABLED
+    FollowMon_SaveState(fieldSystem);
+#endif
     FieldSystem_SaveObjects(fieldSystem);
     FieldSystem_SendPoketchEvent(fieldSystem, POKETCH_EVENT_SAVE, 0);
 

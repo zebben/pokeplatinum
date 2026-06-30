@@ -5,6 +5,7 @@
 
 #include "constants/heap.h"
 
+#include "debug.h"
 #include "savedata/save_table.h"
 
 #include "heap.h"
@@ -36,10 +37,27 @@ static void SaveDataExtra_SetSaveKey(SaveData *saveData, int extraSaveID, u32 ne
 static SaveData *sSaveDataPtr = NULL;
 static BOOL sSaveComplete;
 
+typedef char SaveDataAssert_NormalSaveFitsInSlot[(SAVE_PAGE_MAX <= SAVE_SLOT_PAGE_MAX) ? 1 : -1];
+typedef char SaveDataAssert_ExtraSaveFitsInSlot[(EXTRA_SAVE_PAGE_MAX <= SAVE_SLOT_PAGE_MAX) ? 1 : -1];
+typedef char SaveDataAssert_SaveFitsInFlash[(((BACKUP_SECTOR_START + EXTRA_SAVE_PAGE_MAX) * SAVE_SECTOR_SIZE) <= SAVE_FLASH_SIZE) ? 1 : -1];
+typedef char SaveDataAssert_SaveHeapFitsSaveData[(sizeof(SaveData) <= HEAP_SIZE_SAVE) ? 1 : -1];
+
 SaveData *SaveData_Init(void)
 {
+    EmulatorLog("SaveData_Init: sizeof=%u body=0x%X saveHeap=0x%X appHeap=0x%X pages=0x%X slotPages=0x%X extraMax=0x%X flash=0x%X",
+        sizeof(SaveData),
+        sizeof(SaveDataBody),
+        HEAP_SIZE_SAVE,
+        HEAP_SIZE_APPLICATION,
+        SAVE_PAGE_MAX,
+        SAVE_SLOT_PAGE_MAX,
+        EXTRA_SAVE_PAGE_MAX,
+        SAVE_FLASH_SIZE);
+
     SaveData *saveData = Heap_Alloc(HEAP_ID_SAVE, sizeof(SaveData));
     ;
+    GF_ASSERT(saveData != NULL);
+    EmulatorLog("SaveData_Init: alloc=%p", saveData);
 
     MI_CpuClearFast(saveData, sizeof(SaveData));
 
@@ -50,12 +68,23 @@ SaveData *SaveData_Init(void)
     saveData->isNewGameData = TRUE;
     saveData->fullSaveRequired = TRUE;
 
+    EmulatorLog("SaveData_Init: page info begin");
     SavePageInfo_Init(saveData->pageInfo);
+    EmulatorLog("SaveData_Init: page info ok");
+    EmulatorLog("SaveData_Init: block info begin");
     SaveBlockInfo_Init(saveData->blockInfo, saveData->pageInfo);
+    EmulatorLog("SaveData_Init: block normal off=0x%X size=0x%X pages=%u boxes off=0x%X size=0x%X pages=%u",
+        saveData->blockInfo[SAVE_BLOCK_ID_NORMAL].offset,
+        saveData->blockInfo[SAVE_BLOCK_ID_NORMAL].size,
+        saveData->blockInfo[SAVE_BLOCK_ID_NORMAL].sectorsInUse,
+        saveData->blockInfo[SAVE_BLOCK_ID_BOXES].offset,
+        saveData->blockInfo[SAVE_BLOCK_ID_BOXES].size,
+        saveData->blockInfo[SAVE_BLOCK_ID_BOXES].sectorsInUse);
 
     MI_CpuClearFast(saveData->blockCounters, sizeof(saveData->blockCounters));
 
     int loadResult = SaveData_LoadCheck(saveData);
+    EmulatorLog("SaveData_Init: load check result=%d", loadResult);
 
     saveData->loadCheckStatus = 0;
 
@@ -128,7 +157,7 @@ BOOL SaveData_Erase(SaveData *saveData)
 
     MI_CpuFillFast(saveBuffer, 0xffffffff, SAVE_SECTOR_SIZE);
 
-    for (int i = 0; i < SAVE_PAGE_MAX * SECTOR_ID_MAX; i++) {
+    for (int i = 0; i < SAVE_SLOT_PAGE_MAX; i++) {
         SaveData_CardSave(SAVE_SECTOR_SIZE * (i + PRIMARY_SECTOR_START), saveBuffer, SAVE_SECTOR_SIZE);
         SaveData_CardSave(SAVE_SECTOR_SIZE * (i + BACKUP_SECTOR_START), saveBuffer, SAVE_SECTOR_SIZE);
     }
@@ -440,49 +469,75 @@ static void SaveData_SetBlockCheckInfo(SaveData *saveData, const SaveCheckInfo *
 
 static int SaveData_LoadCheck(SaveData *saveData)
 {
-    u8 *primaryBuffer = Heap_AllocAtEnd(HEAP_ID_APPLICATION, SAVE_SECTOR_SIZE * SAVE_PAGE_MAX);
-    u8 *backupBuffer = Heap_AllocAtEnd(HEAP_ID_APPLICATION, SAVE_SECTOR_SIZE * SAVE_PAGE_MAX);
+    EmulatorLog("SaveData_LoadCheck: begin backup=%d readSize=0x%X primary=0x%X backup=0x%X",
+        saveData->backupExists,
+        SAVE_SECTOR_SIZE * SAVE_PAGE_MAX,
+        PRIMARY_SECTOR_START * SAVE_SECTOR_SIZE,
+        BACKUP_SECTOR_START * SAVE_SECTOR_SIZE);
+    EmulatorLog("SaveData_LoadCheck: allocating 0x%X", SAVE_SECTOR_SIZE * SAVE_PAGE_MAX);
+    u8 *checkBuffer = Heap_AllocAtEnd(HEAP_ID_APPLICATION, SAVE_SECTOR_SIZE * SAVE_PAGE_MAX);
+    GF_ASSERT(checkBuffer != NULL);
+    EmulatorLog("SaveData_LoadCheck: buffer=%p", checkBuffer);
 
     SaveCheckInfo normalInfo[SECTOR_ID_MAX];
     SaveCheckInfo boxInfo[SECTOR_ID_MAX];
 
-    if (SaveData_CardLoad(PRIMARY_SECTOR_START * SAVE_SECTOR_SIZE, primaryBuffer, SAVE_SECTOR_SIZE * SAVE_PAGE_MAX)) {
-        SaveBlockFooter_CheckInfo(&normalInfo[SECTOR_ID_PRIMARY], saveData, (u32)primaryBuffer, SAVE_BLOCK_ID_NORMAL);
-        SaveBlockFooter_CheckInfo(&boxInfo[SECTOR_ID_PRIMARY], saveData, (u32)primaryBuffer, SAVE_BLOCK_ID_BOXES);
+    if (SaveData_CardLoad(PRIMARY_SECTOR_START * SAVE_SECTOR_SIZE, checkBuffer, SAVE_SECTOR_SIZE * SAVE_PAGE_MAX)) {
+        EmulatorLog("SaveData_LoadCheck: primary read ok");
+        SaveBlockFooter_CheckInfo(&normalInfo[SECTOR_ID_PRIMARY], saveData, (u32)checkBuffer, SAVE_BLOCK_ID_NORMAL);
+        SaveBlockFooter_CheckInfo(&boxInfo[SECTOR_ID_PRIMARY], saveData, (u32)checkBuffer, SAVE_BLOCK_ID_BOXES);
     } else {
+        EmulatorLog("SaveData_LoadCheck: primary read failed");
         SaveData_CheckInfoInit(&normalInfo[SECTOR_ID_PRIMARY]);
         SaveData_CheckInfoInit(&boxInfo[SECTOR_ID_PRIMARY]);
     }
 
-    if (SaveData_CardLoad(BACKUP_SECTOR_START * SAVE_SECTOR_SIZE, backupBuffer, SAVE_SECTOR_SIZE * SAVE_PAGE_MAX)) {
-        SaveBlockFooter_CheckInfo(&normalInfo[SECTOR_ID_BACKUP], saveData, (u32)backupBuffer, SAVE_BLOCK_ID_NORMAL);
-        SaveBlockFooter_CheckInfo(&boxInfo[SECTOR_ID_BACKUP], saveData, (u32)backupBuffer, SAVE_BLOCK_ID_BOXES);
+    if (SaveData_CardLoad(BACKUP_SECTOR_START * SAVE_SECTOR_SIZE, checkBuffer, SAVE_SECTOR_SIZE * SAVE_PAGE_MAX)) {
+        EmulatorLog("SaveData_LoadCheck: backup read ok");
+        SaveBlockFooter_CheckInfo(&normalInfo[SECTOR_ID_BACKUP], saveData, (u32)checkBuffer, SAVE_BLOCK_ID_NORMAL);
+        SaveBlockFooter_CheckInfo(&boxInfo[SECTOR_ID_BACKUP], saveData, (u32)checkBuffer, SAVE_BLOCK_ID_BOXES);
     } else {
+        EmulatorLog("SaveData_LoadCheck: backup read failed");
         SaveData_CheckInfoInit(&normalInfo[SECTOR_ID_BACKUP]);
         SaveData_CheckInfoInit(&boxInfo[SECTOR_ID_BACKUP]);
     }
 
-    Heap_Free(primaryBuffer);
-    Heap_Free(backupBuffer);
+    Heap_Free(checkBuffer);
+    EmulatorLog("SaveData_LoadCheck: normal valid=%d/%d box valid=%d/%d",
+        normalInfo[SECTOR_ID_PRIMARY].valid,
+        normalInfo[SECTOR_ID_BACKUP].valid,
+        boxInfo[SECTOR_ID_PRIMARY].valid,
+        boxInfo[SECTOR_ID_BACKUP].valid);
 
     int currNormalSector, currBoxSector, staleNormalSector, staleBoxSector;
     int normalResult = SaveCheckInfo_CompareSectors(&normalInfo[SECTOR_ID_PRIMARY], &normalInfo[SECTOR_ID_BACKUP], &currNormalSector, &staleNormalSector);
     int boxResult = SaveCheckInfo_CompareSectors(&boxInfo[SECTOR_ID_PRIMARY], &boxInfo[SECTOR_ID_BACKUP], &currBoxSector, &staleBoxSector);
+    EmulatorLog("SaveData_LoadCheck: results normal=%d curr=%d stale=%d box=%d curr=%d stale=%d",
+        normalResult,
+        currNormalSector,
+        staleNormalSector,
+        boxResult,
+        currBoxSector,
+        staleBoxSector);
 
     if (normalResult == SECTOR_RESULT_INVALID && boxResult == SECTOR_RESULT_INVALID) {
+        EmulatorLog("SaveData_LoadCheck: return EMPTY");
         return LOAD_RESULT_EMPTY;
     }
 
     if (normalResult == SECTOR_RESULT_INVALID || boxResult == SECTOR_RESULT_INVALID) {
+        EmulatorLog("SaveData_LoadCheck: return ERROR invalid block");
         return LOAD_RESULT_ERROR;
     }
 
     if (normalResult == SECTOR_RESULT_VALID && boxResult == SECTOR_RESULT_VALID) {
         if (normalInfo[currNormalSector].globalCounter == boxInfo[currBoxSector].globalCounter) {
             SaveData_SetBlockCheckInfo(saveData, normalInfo, boxInfo, currNormalSector, currBoxSector);
+            EmulatorLog("SaveData_LoadCheck: return OK counters match");
             return LOAD_RESULT_OK;
         } else {
             SaveData_SetBlockCheckInfo(saveData, normalInfo, boxInfo, staleNormalSector, currBoxSector);
+            EmulatorLog("SaveData_LoadCheck: return CORRUPT counters differ");
             return LOAD_RESULT_CORRUPT;
         }
     }
@@ -490,21 +545,26 @@ static int SaveData_LoadCheck(SaveData *saveData)
     if (normalResult == SECTOR_RESULT_PARTIAL_VALID && boxResult == SECTOR_RESULT_VALID) {
         if (normalInfo[currNormalSector].globalCounter == boxInfo[currBoxSector].globalCounter) {
             SaveData_SetBlockCheckInfo(saveData, normalInfo, boxInfo, currNormalSector, currBoxSector);
+            EmulatorLog("SaveData_LoadCheck: return CORRUPT partial normal/current box");
             return LOAD_RESULT_CORRUPT;
         } else if (normalInfo[currNormalSector].globalCounter == boxInfo[staleBoxSector].globalCounter) {
             SaveData_SetBlockCheckInfo(saveData, normalInfo, boxInfo, currNormalSector, staleBoxSector);
+            EmulatorLog("SaveData_LoadCheck: return CORRUPT partial normal/stale box");
             return LOAD_RESULT_CORRUPT;
         }
 
+        EmulatorLog("SaveData_LoadCheck: return ERROR partial normal mismatch");
         return LOAD_RESULT_ERROR;
     }
 
     if (normalResult == SECTOR_RESULT_VALID && boxResult == SECTOR_RESULT_PARTIAL_VALID) {
         if (normalInfo[currNormalSector].globalCounter == boxInfo[currBoxSector].globalCounter) {
             SaveData_SetBlockCheckInfo(saveData, normalInfo, boxInfo, currNormalSector, currBoxSector);
+            EmulatorLog("SaveData_LoadCheck: return OK partial box/current");
             return LOAD_RESULT_OK;
         } else {
             SaveData_SetBlockCheckInfo(saveData, normalInfo, boxInfo, staleNormalSector, currBoxSector);
+            EmulatorLog("SaveData_LoadCheck: return CORRUPT partial box/stale normal");
             return LOAD_RESULT_CORRUPT;
         }
     }
@@ -514,10 +574,12 @@ static int SaveData_LoadCheck(SaveData *saveData)
         && currNormalSector == currBoxSector) {
         GF_ASSERT(normalInfo[currNormalSector].globalCounter == boxInfo[currBoxSector].globalCounter);
         SaveData_SetBlockCheckInfo(saveData, normalInfo, boxInfo, currNormalSector, currBoxSector);
+        EmulatorLog("SaveData_LoadCheck: return OK partial both");
         return LOAD_RESULT_OK;
     } else {
         GF_ASSERT(normalInfo[currNormalSector].globalCounter == boxInfo[currBoxSector].globalCounter);
         SaveData_SetBlockCheckInfo(saveData, normalInfo, boxInfo, currNormalSector, currBoxSector);
+        EmulatorLog("SaveData_LoadCheck: return CORRUPT partial both");
         return LOAD_RESULT_CORRUPT;
     }
 }
@@ -815,7 +877,15 @@ int SaveTableEntry_BodySize(int saveTableID)
     const SaveTableEntry *saveTable = gSaveTable;
 
     GF_ASSERT(saveTableID < gSaveTableSize);
+    EmulatorLog("SaveTableEntry_BodySize: id=%d table=0x%X entry=0x%X dataID=%d sizeFunc=0x%X initFunc=0x%X",
+        saveTableID,
+        (u32)saveTable,
+        (u32)&saveTable[saveTableID],
+        saveTable[saveTableID].dataID,
+        (u32)saveTable[saveTableID].sizeFunc,
+        (u32)saveTable[saveTableID].initFunc);
     int size = saveTable[saveTableID].sizeFunc();
+    EmulatorLog("SaveTableEntry_BodySize: id=%d rawSize=0x%X", saveTableID, size);
 
     size += 4 - (size % 4);
     size += 4;
@@ -828,9 +898,16 @@ static void SavePageInfo_Init(SavePageInfo *pageInfo)
     const SaveTableEntry *saveTable = gSaveTable;
     int i, totalSize = 0;
 
+    EmulatorLog("SavePageInfo_Init: table=0x%X pageInfo=0x%X tableSize=%d entryMax=%d",
+        (u32)saveTable,
+        (u32)pageInfo,
+        gSaveTableSize,
+        SAVE_TABLE_ENTRY_MAX);
     GF_ASSERT(gSaveTableSize == SAVE_TABLE_ENTRY_MAX);
 
     for (i = 0; i < gSaveTableSize; i++) {
+        EmulatorLog("SavePageInfo_Init: entry=%d expectedID=%d actualID=%d block=%u total=0x%X",
+            i, i, saveTable[i].dataID, saveTable[i].blockID, totalSize);
         GF_ASSERT(saveTable[i].dataID == i);
 
         pageInfo[i].pageID = saveTable[i].dataID;
@@ -843,9 +920,11 @@ static void SavePageInfo_Init(SavePageInfo *pageInfo)
 
         if ((i == gSaveTableSize - 1) || (saveTable[i].blockID != saveTable[i + 1].blockID)) {
             totalSize += sizeof(SaveBlockFooter);
+            EmulatorLog("SavePageInfo_Init: block footer after entry=%d total=0x%X", i, totalSize);
         }
     }
 
+    EmulatorLog("SavePageInfo_Init: total=0x%X capacity=0x%X", totalSize, SAVE_SECTOR_SIZE * SAVE_PAGE_MAX);
     GF_ASSERT(totalSize <= SAVE_SECTOR_SIZE * SAVE_PAGE_MAX);
 }
 
@@ -853,11 +932,13 @@ static void SaveBlockInfo_Init(SaveBlockInfo *blockInfo, const SavePageInfo *pag
 {
     int totalSectors = 0, blockOffset = 0, i, page = 0;
 
+    EmulatorLog("SaveBlockInfo_Init: begin blockInfo=0x%X pageInfo=0x%X", (u32)blockInfo, (u32)pageInfo);
+
     for (i = 0; i < SAVE_BLOCK_ID_MAX; i++) {
         blockInfo[i].saveBlockID = i;
         blockInfo[i].size = 0;
 
-        while (pageInfo[page].blockID == i && page < gSaveTableSize) {
+        while (page < gSaveTableSize && pageInfo[page].blockID == i) {
             blockInfo[i].size += pageInfo[page].size;
             page++;
         }
@@ -869,8 +950,18 @@ static void SaveBlockInfo_Init(SaveBlockInfo *blockInfo, const SavePageInfo *pag
 
         totalSectors += blockInfo[i].sectorsInUse;
         blockOffset += blockInfo[i].size;
+
+        EmulatorLog("SaveBlockInfo_Init: block=%d size=0x%X offset=0x%X sectorStart=%u sectors=%u nextPage=%d totalSectors=%d",
+            i,
+            blockInfo[i].size,
+            blockInfo[i].offset,
+            blockInfo[i].sectorStartPos,
+            blockInfo[i].sectorsInUse,
+            page,
+            totalSectors);
     }
 
+    EmulatorLog("SaveBlockInfo_Init: totalSectors=%d pageMax=%d", totalSectors, SAVE_PAGE_MAX);
     GF_ASSERT(totalSectors == blockInfo[SAVE_BLOCK_ID_MAX - 1].sectorStartPos + blockInfo[SAVE_BLOCK_ID_MAX - 1].sectorsInUse);
     GF_ASSERT(totalSectors <= SAVE_PAGE_MAX);
 }
@@ -884,13 +975,18 @@ static void SaveTable_Clear(SaveDataBody *body, const SavePageInfo *pageInfo)
     void *page;
     u32 location;
 
+    EmulatorLog("SaveTable_Clear: begin body=0x%X tableSize=%d", (u32)body, gSaveTableSize);
+
     for (i = 0; i < gSaveTableSize; i++) {
         location = pageInfo[i].location;
         page = &body->data[location];
         size = pageInfo[i].size;
+        EmulatorLog("SaveTable_Clear: entry=%d loc=0x%X size=0x%X init=0x%X", i, location, size, (u32)saveTable[i].initFunc);
         MI_CpuClearFast(page, size);
         saveTable[i].initFunc(page);
     }
+
+    EmulatorLog("SaveTable_Clear: done");
 }
 
 void SaveDataExtra_Init(SaveData *saveData)
@@ -1214,10 +1310,13 @@ BOOL SaveData_CardBackupType(void)
     BOOL result;
 
     if (CARD_IdentifyBackup(CARD_BACKUP_TYPE_FLASH_4MBITS)) {
+        EmulatorLog("SaveData_CardBackupType: FLASH_4MBITS");
         result = CARD_BACKUP_TYPE_FLASH_4MBITS;
     } else if (CARD_IdentifyBackup(CARD_BACKUP_TYPE_FLASH_2MBITS)) {
+        EmulatorLog("SaveData_CardBackupType: FLASH_2MBITS");
         result = CARD_BACKUP_TYPE_FLASH_2MBITS;
     } else {
+        EmulatorLog("SaveData_CardBackupType: not detected");
         result = CARD_BACKUP_TYPE_NOT_USE;
     }
 
@@ -1241,6 +1340,7 @@ BOOL SaveData_CardSave(u32 address, void *data, u32 size)
 
 BOOL SaveData_CardLoad(u32 address, void *data, u32 size)
 {
+    EmulatorLog("SaveData_CardLoad: addr=0x%X size=0x%X", address, size);
     s32 lockID = OS_GetLockID();
     GF_ASSERT(lockID != OS_LOCK_ID_ERROR);
 
@@ -1253,10 +1353,12 @@ BOOL SaveData_CardLoad(u32 address, void *data, u32 size)
     OS_ReleaseLockID(lockID);
 
     if (!result) {
+        EmulatorLog("SaveData_CardLoad: failed addr=0x%X size=0x%X result=%d", address, size, CARD_GetResultCode());
         Heap_Free(sSaveDataPtr);
         sub_0209A74C(HEAP_ID_SAVE);
     }
 
+    EmulatorLog("SaveData_CardLoad: ok addr=0x%X size=0x%X", address, size);
     return result;
 }
 

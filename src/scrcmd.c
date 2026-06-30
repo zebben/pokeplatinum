@@ -259,6 +259,7 @@ static BOOL ScriptContext_WaitSubContext(ScriptContext *ctx);
 static BOOL ScrCmd_ReturnCommonScript(ScriptContext *ctx);
 static BOOL ScrCmd_GoTo(ScriptContext *ctx);
 static MapObject *GetLocalMapObjByIndex(FieldSystem *fieldSystem, int localID);
+static MapObject *GetPartnerFollowerMapObj(FieldSystem *fieldSystem);
 static BOOL ScrCmd_Unused_017(ScriptContext *ctx);
 static BOOL ScrCmd_Unused_018(ScriptContext *ctx);
 static BOOL ScrCmd_Unused_019(ScriptContext *ctx);
@@ -2098,7 +2099,9 @@ static MapObject *GetLocalMapObjByIndex(FieldSystem *fieldSystem, int localID)
     MapObject *object;
 
     if (localID == LOCALID_FOLLOWER) {
-        object = MapObjMan_GetLocalMapObjByMovementType(fieldSystem->mapObjMan, MOVEMENT_TYPE_FOLLOW_PLAYER);
+        object = GetPartnerFollowerMapObj(fieldSystem);
+    } else if (localID == LOCALID_FOLLOW_MON) {
+        object = MapObjMan_LocalMapObjByIndex(fieldSystem->mapObjMan, LOCALID_FOLLOW_MON);
     } else if (localID == LOCALID_CAMERA) {
         MapObject **cameraObject = FieldSystem_GetScriptMemberPtr(fieldSystem, SCRIPT_MANAGER_CAMERA_OBJECT);
         object = *cameraObject;
@@ -2107,6 +2110,21 @@ static MapObject *GetLocalMapObjByIndex(FieldSystem *fieldSystem, int localID)
     }
 
     return object;
+}
+
+static MapObject *GetPartnerFollowerMapObj(FieldSystem *fieldSystem)
+{
+    MapObject *object;
+    int objectIndex = 0;
+
+    while (MapObjectMan_FindObjectWithStatus(fieldSystem->mapObjMan, &object, &objectIndex, MAP_OBJ_STATUS_0)) {
+        if (MapObject_GetMovementType(object) == MOVEMENT_TYPE_FOLLOW_PLAYER
+            && MapObject_GetLocalID(object) != LOCALID_FOLLOW_MON) {
+            return object;
+        }
+    }
+
+    return NULL;
 }
 
 static BOOL ScrCmd_WaitMovement(ScriptContext *ctx)
@@ -2181,7 +2199,7 @@ static BOOL ScrCmd_LockAll(ScriptContext *ctx)
         MapObjectManager *mapObjMan = fieldSystem->mapObjMan;
         MapObjectMan_PauseAllMovement(mapObjMan);
 
-        MapObject *object = MapObjMan_GetLocalMapObjByMovementType(fieldSystem->mapObjMan, MOVEMENT_TYPE_FOLLOW_PLAYER);
+        MapObject *object = GetPartnerFollowerMapObj(fieldSystem);
 
         if (object
             && SystemFlag_CheckHasPartner(SaveData_GetVarsFlags(fieldSystem->saveData)) == TRUE
@@ -2237,10 +2255,12 @@ static BOOL sub_02041004(ScriptContext *ctx)
     }
 
     if (inline_020410F4_1(1 << 1)) {
-        MapObject *v3 = MapObjMan_GetLocalMapObjByMovementType(fieldSystem->mapObjMan, MOVEMENT_TYPE_FOLLOW_PLAYER);
+        MapObject *v3 = GetPartnerFollowerMapObj(fieldSystem);
 
-        if (!MapObject_IsMoving(v3)) {
-            MapObject_SetPauseMovementOn(v3);
+        if (v3 == NULL || !MapObject_IsMoving(v3)) {
+            if (v3 != NULL) {
+                MapObject_SetPauseMovementOn(v3);
+            }
             inline_020410F4_3(1 << 1);
         }
     }
@@ -2264,9 +2284,9 @@ static BOOL sub_02041004(ScriptContext *ctx)
 static BOOL sub_020410CC(ScriptContext *ctx)
 {
     FieldSystem *fieldSystem = ctx->fieldSystem;
-    MapObject *v1 = MapObjMan_GetLocalMapObjByMovementType(fieldSystem->mapObjMan, MOVEMENT_TYPE_FOLLOW_PLAYER);
+    MapObject *v1 = GetPartnerFollowerMapObj(fieldSystem);
 
-    if (!MapObject_IsMoving(v1)) {
+    if (v1 != NULL && !MapObject_IsMoving(v1)) {
         MapObject_SetPauseMovementOn(v1);
         return TRUE;
     }
@@ -2279,7 +2299,7 @@ static BOOL ScrCmd_LockLastTalked(ScriptContext *ctx)
     FieldSystem *fieldSystem = ctx->fieldSystem;
     MapObject **v1 = FieldSystem_GetScriptMemberPtr(fieldSystem, SCRIPT_MANAGER_TARGET_OBJECT);
     MapObject *player = PlayerAvatar_GetMapObject(fieldSystem->playerAvatar);
-    MapObject *v3 = MapObjMan_GetLocalMapObjByMovementType(fieldSystem->mapObjMan, MOVEMENT_TYPE_FOLLOW_PLAYER);
+    MapObject *v3 = GetPartnerFollowerMapObj(fieldSystem);
     MapObject *v4 = sub_02069EB8(*v1);
     MapObjectManager *mapObjMan = fieldSystem->mapObjMan;
 
@@ -2534,9 +2554,11 @@ static BOOL ScrCmd_GetMovementType(ScriptContext *ctx)
 
 static BOOL ScrCmd_Unused_06E(ScriptContext *ctx)
 {
-    MapObject *mapObj = MapObjMan_GetLocalMapObjByMovementType(ctx->fieldSystem->mapObjMan, MOVEMENT_TYPE_FOLLOW_PLAYER);
+    MapObject *mapObj = GetPartnerFollowerMapObj(ctx->fieldSystem);
 
-    sub_020633C8(mapObj, 0xfe);
+    if (mapObj != NULL) {
+        sub_020633C8(mapObj, 0xfe);
+    }
     return FALSE;
 }
 

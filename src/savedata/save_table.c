@@ -27,6 +27,7 @@
 #include "poketch.h"
 #include "rankings.h"
 #include "record_mixed_rng.h"
+#include "save_follow_mon.h"
 #include "save_player.h"
 #include "savedata.h"
 #include "savedata_misc.h"
@@ -83,6 +84,9 @@ const SaveTableEntry gSaveTable[] = {
     { SAVE_TABLE_ENTRY_UNLOCKED_EASY_CHAT_WORDS, SAVE_BLOCK_ID_NORMAL, (SaveEntrySizeFunc)UnlockedEasyChatWords_SaveSize, (SaveEntryInitFunc)UnlockedEasyChatWords_Init },
     { SAVE_TABLE_ENTRY_EMAIL, SAVE_BLOCK_ID_NORMAL, (SaveEntrySizeFunc)Email_SaveSize, (SaveEntryInitFunc)Email_Init },
     { SAVE_TABLE_ENTRY_WIFI_QUESTIONS, SAVE_BLOCK_ID_NORMAL, (SaveEntrySizeFunc)WiFiQuestion_SaveSize, (SaveEntryInitFunc)WiFiQuestion_Init },
+#if FOLLOW_MON_SAVE_ENABLED
+    { SAVE_TABLE_ENTRY_FOLLOW_MON, SAVE_BLOCK_ID_NORMAL, (SaveEntrySizeFunc)Save_FollowMon_sizeof, (SaveEntryInitFunc)Save_FollowMon_Init },
+#endif
     { SAVE_TABLE_ENTRY_PC_BOXES, SAVE_BLOCK_ID_BOXES, (SaveEntrySizeFunc)PCBoxes_SaveSize, (SaveEntryInitFunc)PCBoxes_Init },
 };
 
@@ -111,12 +115,12 @@ MigratedPokemon *SaveData_GetPalParkTransfer(SaveData *saveData)
 }
 
 const SaveTableEntry gExtraSaveTable[] = {
-    { EXTRA_SAVE_TABLE_ENTRY_HALL_OF_FAME, SAVE_PAGE_MAX, (SaveEntrySizeFunc)HallOfFame_SaveSize, (SaveEntryInitFunc)HallOfFame_Init },
-    { EXTRA_SAVE_TABLE_ENTRY_FRONTIER, SAVE_PAGE_MAX + 3, (SaveEntrySizeFunc)BattleHallWinRecords_SaveSize, (SaveEntryInitFunc)BattleHallWinRecords_Init },
-    { EXTRA_SAVE_TABLE_ENTRY_MY_RECORDINGS, SAVE_PAGE_MAX + 4, (SaveEntrySizeFunc)BattleRecording_SaveSize, (SaveEntryInitFunc)BattleRecording_Init },
-    { EXTRA_SAVE_TABLE_ENTRY_DL_RECORDINGS_0, SAVE_PAGE_MAX + 6, (SaveEntrySizeFunc)BattleRecording_SaveSize, (SaveEntryInitFunc)BattleRecording_Init },
-    { EXTRA_SAVE_TABLE_ENTRY_DL_RECORDINGS_1, SAVE_PAGE_MAX + 8, (SaveEntrySizeFunc)BattleRecording_SaveSize, (SaveEntryInitFunc)BattleRecording_Init },
-    { EXTRA_SAVE_TABLE_ENTRY_DL_RECORDINGS_2, SAVE_PAGE_MAX + 10, (SaveEntrySizeFunc)BattleRecording_SaveSize, (SaveEntryInitFunc)BattleRecording_Init },
+    { EXTRA_SAVE_TABLE_ENTRY_HALL_OF_FAME, EXTRA_SAVE_PAGE_BASE, (SaveEntrySizeFunc)HallOfFame_SaveSize, (SaveEntryInitFunc)HallOfFame_Init },
+    { EXTRA_SAVE_TABLE_ENTRY_FRONTIER, EXTRA_SAVE_PAGE_BASE + 3, (SaveEntrySizeFunc)BattleHallWinRecords_SaveSize, (SaveEntryInitFunc)BattleHallWinRecords_Init },
+    { EXTRA_SAVE_TABLE_ENTRY_MY_RECORDINGS, EXTRA_SAVE_PAGE_BASE + 4, (SaveEntrySizeFunc)BattleRecording_SaveSize, (SaveEntryInitFunc)BattleRecording_Init },
+    { EXTRA_SAVE_TABLE_ENTRY_DL_RECORDINGS_0, EXTRA_SAVE_PAGE_BASE + 6, (SaveEntrySizeFunc)BattleRecording_SaveSize, (SaveEntryInitFunc)BattleRecording_Init },
+    { EXTRA_SAVE_TABLE_ENTRY_DL_RECORDINGS_1, EXTRA_SAVE_PAGE_BASE + 8, (SaveEntrySizeFunc)BattleRecording_SaveSize, (SaveEntryInitFunc)BattleRecording_Init },
+    { EXTRA_SAVE_TABLE_ENTRY_DL_RECORDINGS_2, EXTRA_SAVE_PAGE_BASE + 10, (SaveEntrySizeFunc)BattleRecording_SaveSize, (SaveEntryInitFunc)BattleRecording_Init },
 };
 
 const int gExtraSaveTableSize = NELEMS(gExtraSaveTable);

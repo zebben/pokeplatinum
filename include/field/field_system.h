@@ -126,8 +126,8 @@ typedef struct FieldSystem_t {
     u32 unk_C0;
     UnkStruct_ov66_0222DCE0_sub1 unk_C4;
 
-    Follower follower;
-    FollowerMood followerMood;
+    FollowMon followMon;
+    FollowMonMood followMonMood;
 } FieldSystem;
 
 #endif // POKEPLATINUM_FIELD_SYSTEM_H

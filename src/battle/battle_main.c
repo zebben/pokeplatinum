@@ -185,7 +185,7 @@ BOOL Battle_Main(ApplicationManager *appMan, int *state)
 
     switch (*state) {
     case BATTLE_STATE_CREATE_HEAP:
-        Heap_Create(HEAP_ID_APPLICATION, HEAP_ID_BATTLE, 0xB0000);
+        Heap_Create(HEAP_ID_APPLICATION, HEAP_ID_BATTLE, HEAP_SIZE_BATTLE);
 
         if (dto->battleType & BATTLE_TYPE_LINK && (dto->battleStatusMask & BATTLE_STATUS_RECORDING) == FALSE) {
             *state = BATTLE_STATE_INIT_LINK_COMM;

@@ -30,6 +30,7 @@
 #include "field_battle_data_transfer.h"
 #include "field_bgm.h"
 #include "field_task.h"
+#include "follower.h"
 #include "game_records.h"
 #include "heap.h"
 #include "map_object.h"
@@ -229,6 +230,9 @@ void PlayerAvatar_RequestChangeState(PlayerAvatar *playerAvatar)
 {
     u32 state = 0;
     u32 flag = PlayerAvatar_GetRequestStateFlag(playerAvatar);
+#if FOLLOW_MON_ENABLED
+    MapObject *mapObj;
+#endif
 
     do {
         if (flag & 0x1) {
@@ -239,6 +243,13 @@ void PlayerAvatar_RequestChangeState(PlayerAvatar *playerAvatar)
     } while (++state < 10);
 
     PlayerAvatar_SetRequestStateFlag(playerAvatar, 0);
+
+#if FOLLOW_MON_ENABLED
+    mapObj = PlayerAvatar_GetMapObject(playerAvatar);
+    if (mapObj != NULL) {
+        FollowMon_UpdatePlayerState(MapObject_FieldSystem(mapObj));
+    }
+#endif
 }
 
 static void PlayerAvatar_RequestStateWalking(PlayerAvatar *playerAvatar)

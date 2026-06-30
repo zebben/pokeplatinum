@@ -55,6 +55,7 @@
 #include "field_overworld_state.h"
 #include "field_system.h"
 #include "field_task.h"
+#include "follower.h"
 #include "game_overlay.h"
 #include "graphics.h"
 #include "gx_layers.h"
@@ -72,6 +73,7 @@
 #include "pltt_transfer.h"
 #include "pokeradar.h"
 #include "render_oam.h"
+#include "save_follow_mon.h"
 #include "savedata_misc.h"
 #include "screen_fade.h"
 #include "script_manager.h"
@@ -410,7 +412,12 @@ static BOOL FieldMap_ChangeZone(FieldSystem *fieldSystem)
     }
 
     FieldOverworldState *fieldState = SaveData_GetFieldOverworldState(fieldSystem->saveData);
+#if FOLLOW_MON_ENABLED
+    SaveFollowMon *saveFollowMon = Save_FollowMon_Get(fieldSystem->saveData);
 
+    Save_FollowMon_SetMapID(oldMapID, saveFollowMon);
+    Save_FollowMon_SetInhibitFlagState(saveFollowMon, FALSE);
+#endif
     fieldSystem->location->mapId = newMapID;
 
     MapHeaderData_Load(fieldSystem, newMapID);
@@ -449,7 +456,12 @@ void FieldMap_ChangeZoneDistortionWorld(FieldSystem *fieldSystem, u32 mapId)
 {
     u32 oldMapId = fieldSystem->location->mapId;
     FieldOverworldState *fieldState = SaveData_GetFieldOverworldState(fieldSystem->saveData);
+#if FOLLOW_MON_ENABLED
+    SaveFollowMon *saveFollowMon = Save_FollowMon_Get(fieldSystem->saveData);
 
+    Save_FollowMon_SetMapID(oldMapId, saveFollowMon);
+    Save_FollowMon_SetInhibitFlagState(saveFollowMon, FALSE);
+#endif
     fieldSystem->location->mapId = mapId;
 
     MapHeaderData_Load(fieldSystem, mapId);
@@ -854,6 +866,9 @@ static void ov5_021D1878(FieldSystem *fieldSystem)
     }
 
     sub_02061C48(fieldSystem->mapObjMan);
+#if FOLLOW_MON_ENABLED
+    FollowMon_Reset(fieldSystem);
+#endif
     CommPlayerMan_ForcePos();
     sub_02062C3C(fieldSystem->mapObjMan);
     LandDataManager_TrackTarget(PlayerAvatar_GetPos(fieldSystem->playerAvatar), fieldSystem->landDataMan);
